@@ -30,6 +30,7 @@ class AgentBridge {
     }
 
     const config = this.configManager.load();
+    const gatewayController = (await import('../services/gateway.js')).default;
     
     if (!this.sessions.has(sessionId)) {
       this.sessions.set(sessionId, []);
@@ -38,55 +39,52 @@ class AgentBridge {
     const history = this.sessions.get(sessionId);
     history.push({ role: 'user', content: text, timestamp: new Date() });
 
+    // Define tools for the agent
+    const tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'toggle_channel',
+          description: 'Enable or disable a messaging channel (whatsapp, telegram, or discord)',
+          parameters: {
+            type: 'object',
+            properties: {
+              channel: { type: 'string', enum: ['whatsapp', 'telegram', 'discord'] },
+              enabled: { type: 'boolean' }
+            },
+            required: ['channel', 'enabled']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_gateway_status',
+          description: 'Get the current status of all messaging channels',
+          parameters: { type: 'object', properties: {} }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'update_system_prompt',
+          description: 'Update the AI agent system instruction/persona',
+          parameters: {
+            type: 'object',
+            properties: {
+              prompt: { type: 'string', description: 'The new system prompt text' }
+            },
+            required: ['prompt']
+          }
+        }
+      }
+    ];
+
     try {
       let responseText = '';
       const provider = config.provider;
 
-      if (provider === 'gemini') {
-        const genAI = this._getProviderInstance(config);
-        const model = genAI.getGenerativeModel({ model: config.model || "gemini-1.5-pro" });
-        
-        // Gemini handles history slightly differently (user/model roles)
-        const chatHistory = history.map(msg => ({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.content }]
-        }));
-        
-        // Exclude the most recent message from history as it's passed separately
-        const previousHistory = chatHistory.slice(0, -1);
-        
-        const chat = model.startChat({
-          history: previousHistory,
-          generationConfig: {
-            maxOutputTokens: 1000,
-          },
-          systemInstruction: {
-            role: "system",
-            parts: [{ text: config.systemPrompt }]
-          }
-        });
-
-        const result = await chat.sendMessage(text);
-        responseText = result.response.text();
-        
-      } else if (provider === 'claude') {
-        const anthropic = this._getProviderInstance(config);
-        
-        const messages = history.map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'assistant',
-          content: msg.content
-        }));
-
-        const result = await anthropic.messages.create({
-          model: 'claude-3-opus-20240229',
-          system: config.systemPrompt,
-          max_tokens: 1024,
-          messages: messages
-        });
-        
-        responseText = result.content[0].text;
-        
-      } else if (provider === 'openai') {
+      if (provider === 'openai') {
         const openai = this._getProviderInstance(config);
         
         const messages = [
@@ -97,13 +95,111 @@ class AgentBridge {
           }))
         ];
 
-        const result = await openai.chat.completions.create({
-          model: 'gpt-4o',
+        let result = await openai.chat.completions.create({
+          model: config.model || 'gpt-4o',
           messages: messages,
+          tools: tools,
+          tool_choice: 'auto',
           max_tokens: 1000
         });
         
-        responseText = result.choices[0].message.content;
+        let message = result.choices[0].message;
+
+        // Handle tool calls
+        if (message.tool_calls) {
+          for (const toolCall of message.tool_calls) {
+            const name = toolCall.function.name;
+            const args = JSON.parse(toolCall.function.arguments);
+            let toolOutput = '';
+
+            console.log(chalk.blue(`[Agent Tool] Executing ${name}...`));
+
+            if (name === 'toggle_channel') {
+              const res = await gatewayController.toggleChannel(args.channel, args.enabled);
+              toolOutput = JSON.stringify(res);
+            } else if (name === 'get_gateway_status') {
+              toolOutput = JSON.stringify(gatewayController.getStatus());
+            } else if (name === 'update_system_prompt') {
+              const res = await gatewayController.updateSystemPrompt(args.prompt);
+              toolOutput = JSON.stringify(res);
+            }
+
+            messages.push(message);
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: toolOutput
+            });
+          }
+
+          // Get final response after tool execution
+          result = await openai.chat.completions.create({
+            model: config.model || 'gpt-4o',
+            messages: messages
+          });
+          responseText = result.choices[0].message.content;
+        } else {
+          responseText = message.content;
+        }
+        
+      } else if (provider === 'gemini') {
+          // Gemini tool calling implementation
+          const genAI = this._getProviderInstance(config);
+          const model = genAI.getGenerativeModel({ 
+            model: config.model || "gemini-1.5-pro",
+            tools: [{ 
+              functionDeclarations: tools.map(t => ({
+                name: t.function.name,
+                description: t.function.description,
+                parameters: t.function.parameters
+              }))
+            }]
+          });
+          
+          const chat = model.startChat({
+            history: history.slice(0, -1).map(msg => ({
+              role: msg.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: msg.content }]
+            })),
+            systemInstruction: config.systemPrompt
+          });
+
+          const result = await chat.sendMessage(text);
+          const call = result.response.functionCalls()?.[0];
+
+          if (call) {
+            console.log(chalk.blue(`[Agent Tool] Gemini executing ${call.name}...`));
+            let toolOutput = {};
+
+            if (call.name === 'toggle_channel') {
+              toolOutput = await gatewayController.toggleChannel(call.args.channel, call.args.enabled);
+            } else if (call.name === 'get_gateway_status') {
+              toolOutput = gatewayController.getStatus();
+            } else if (call.name === 'update_system_prompt') {
+              toolOutput = await gatewayController.updateSystemPrompt(call.args.prompt);
+            }
+
+            const finalResult = await chat.sendMessage([{
+              functionResponse: {
+                name: call.name,
+                response: { content: toolOutput }
+              }
+            }]);
+            responseText = finalResult.response.text();
+          } else {
+            responseText = result.response.text();
+          }
+
+      } else if (provider === 'claude') {
+        // Fallback for Claude without tools for now to keep it simple, or implement if easy
+        const anthropic = this._getProviderInstance(config);
+        const result = await anthropic.messages.create({
+          model: config.model || 'claude-3-5-sonnet-20240620',
+          system: config.systemPrompt,
+          max_tokens: 1024,
+          messages: history.map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content }))
+        });
+        responseText = result.content[0].text;
       }
 
       history.push({ role: 'assistant', content: responseText, timestamp: new Date() });
@@ -111,9 +207,8 @@ class AgentBridge {
 
     } catch (error) {
       console.error(`AI Provider Error [${config.provider}]:`, error.message);
-      // Revert the last user message since it failed to get a response
       history.pop(); 
-      return 'Sorry, I could not reach the AI. Please check your API key with agentrelay config show';
+      return `Error: ${error.message}`;
     }
   }
 
@@ -130,4 +225,6 @@ class AgentBridge {
   }
 }
 
-export default AgentBridge;
+// Export a singleton instance
+const agentBridge = new AgentBridge();
+export default agentBridge;

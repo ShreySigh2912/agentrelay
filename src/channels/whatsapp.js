@@ -10,7 +10,7 @@ import Config from '../config/index.js';
 class WhatsAppChannel {
   constructor() {
     this.config = new Config().load();
-    this.bridge = new AgentBridge();
+    this.bridge = AgentBridge;
     this.sessionManager = new SessionManager();
     this.sock = null;
   }
@@ -25,7 +25,8 @@ class WhatsAppChannel {
 
       this.sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
+        // Removed printQRInTerminal: true (deprecated) 
+        // Baileys will still output QR if it needs to, but we avoid the direct flag warning
         generateHighQualityLinkPreview: true,
         // Standard Baileys practice: use a silent pino logger to avoid internal 'child' of undefined errors
         logger: pino({ level: 'silent' }),
@@ -35,14 +36,21 @@ class WhatsAppChannel {
       this.sock.ev.on('creds.update', saveCreds);
 
       this.sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
+        const { connection, lastDisconnect, qr } = update;
         
+        if (qr) {
+          console.log(chalk.yellow('[WhatsApp] New QR Code generated. Please scan it in the terminal or dashboard.'));
+        }
+
         if (connection === 'close') {
-          const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-          console.log(chalk.yellow(`[WhatsApp] Connection closed. Reconnecting: ${shouldReconnect}`));
+          const statusCode = lastDisconnect?.error?.output?.statusCode;
+          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+          
+          console.log(chalk.yellow(`[WhatsApp] Connection closed (Reason: ${statusCode}). Reconnecting: ${shouldReconnect}`));
+          
           if (shouldReconnect) {
-            // Reconnect logic
-            this.start();
+            // Reconnect logic with 5s delay to avoid hammers
+            setTimeout(() => this.start(), 5000);
           } else {
             console.log(chalk.red('[WhatsApp] Logged out. Please delete the ~/.agentrelay/auth/whatsapp directory and authenticate again.'));
           }

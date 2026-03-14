@@ -7,7 +7,7 @@ import Config from '../config/index.js';
 class DiscordChannel {
   constructor() {
     this.config = new Config().load();
-    this.bridge = new AgentBridge();
+    this.bridge = AgentBridge;
     this.sessionManager = new SessionManager();
     this.client = null;
   }

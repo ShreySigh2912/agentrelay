@@ -10,10 +10,7 @@ import { fileURLToPath } from 'url';
 import Config from '../config/index.js';
 import SessionManager from '../sessions/manager.js';
 import AgentBridge from '../agent/bridge.js';
-
-import TelegramChannel from '../channels/telegram.js';
-import DiscordChannel from '../channels/discord.js';
-import WhatsAppChannel from '../channels/whatsapp.js';
+import gatewayController from '../services/gateway.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,54 +29,20 @@ export default async function startGateway() {
 
   const baseConfig = configManager.load();
   const sessionManager = new SessionManager();
-  const agentBridge = new AgentBridge();
   
-  // To keep track of running channels for shutdown
-  const activeChannels = [];
-  const channelStatus = {
-    whatsapp: 'disabled',
-    telegram: 'disabled',
-    discord: 'disabled'
-  };
-
-  // STEP 2 — Start all enabled channels
+  // STEP 2 — Start all enabled channels via the controller
   console.log(chalk.cyan('Starting AgentRelay Gateway...\n'));
+  await gatewayController.startAll();
 
-  if (baseConfig.channels?.telegram?.enabled) {
-    try {
-      const tg = new TelegramChannel();
-      await tg.start();
-      activeChannels.push(tg);
-      channelStatus.telegram = 'connected';
-    } catch (error) {
-       console.error(chalk.red(`❌ Telegram failed: ${error.message}`));
-       channelStatus.telegram = 'error';
-    }
-  }
-
-  if (baseConfig.channels?.discord?.enabled) {
-    try {
-      const discord = new DiscordChannel();
-      await discord.start();
-      activeChannels.push(discord);
-       channelStatus.discord = 'connected';
-    } catch (error) {
-      console.error(chalk.red(`❌ Discord failed: ${error.message}`));
-      channelStatus.discord = 'error';
-    }
-  }
-
-  if (baseConfig.channels?.whatsapp?.enabled) {
-    try {
-      const wa = new WhatsAppChannel();
-      await wa.start();
-      activeChannels.push(wa);
-      channelStatus.whatsapp = 'connected';
-    } catch (error) {
-      console.error(chalk.red(`❌ WhatsApp failed: ${error.message}`));
-      channelStatus.whatsapp = 'error';
-    }
-  }
+  // Map for status reporting to Socket.IO
+  const getStatus = () => {
+    const s = gatewayController.getStatus();
+    return {
+      whatsapp: s.whatsapp.running ? 'connected' : (s.whatsapp.enabled ? 'error' : 'disabled'),
+      telegram: s.telegram.running ? 'connected' : (s.telegram.enabled ? 'error' : 'disabled'),
+      discord: s.discord.running ? 'connected' : (s.discord.enabled ? 'error' : 'disabled')
+    };
+  };
 
   // STEP 3 — Start Express HTTP server & Socket.IO
   const app = express();
@@ -95,7 +58,7 @@ export default async function startGateway() {
 
   io.on('connection', (socket) => {
     // Send initial statuses immediately upon connect
-    socket.emit('channel:status', channelStatus);
+    socket.emit('channel:status', getStatus());
   });
 
   // STEP 4 — REST API endpoints
@@ -108,14 +71,14 @@ export default async function startGateway() {
   // Delete a session
   app.delete('/api/sessions/:id', (req, res) => {
     sessionManager.delete(req.params.id);
-    agentBridge.clearSession(req.params.id);
+    AgentBridge.clearSession(req.params.id);
     io.emit('session:update', req.params.id, 'deleted');
     res.json({ success: true });
   });
 
   // Return chat history for a session
   app.get('/api/sessions/:id/history', (req, res) => {
-    res.json(agentBridge.getSessionHistory(req.params.id));
+    res.json(AgentBridge.getSessionHistory(req.params.id));
   });
 
   // Return config but with API key masked
@@ -173,12 +136,11 @@ export default async function startGateway() {
   const shutdown = async () => {
     console.log(chalk.yellow('\nShutting down safely...'));
     
-    // Stop all listening channels
-    for (const channel of activeChannels) {
-      if (typeof channel.stop === 'function') {
-         await channel.stop();
-      }
-    }
+    // Stop all listening channels via controller
+    const status = gatewayController.getStatus();
+    if (status.whatsapp.running) await gatewayController.stopChannel('whatsapp');
+    if (status.telegram.running) await gatewayController.stopChannel('telegram');
+    if (status.discord.running) await gatewayController.stopChannel('discord');
 
     server.close(() => {
       console.log(chalk.green('AgentRelay stopped.'));

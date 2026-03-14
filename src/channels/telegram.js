@@ -7,7 +7,7 @@ import Config from '../config/index.js';
 class TelegramChannel {
   constructor() {
     this.config = new Config().load();
-    this.bridge = new AgentBridge();
+    this.bridge = AgentBridge;
     this.sessionManager = new SessionManager();
     this.bot = null;
     this.botInfo = null;
