@@ -1,0 +1,17 @@
+# Exclude source files and config
+.github
+node_modules
+src/web/ui/src
+src/web/ui/public
+src/web/ui/vite.config.js
+src/web/ui/postcss.config.js
+src/web/ui/tailwind.config.js
+src/web/ui/eslint.config.js
+src/web/ui/index.html
+src/web/ui/package.json
+src/web/ui/package-lock.json
+
+# Keep these
+!src/web/ui/dist
+!bin
+!src
