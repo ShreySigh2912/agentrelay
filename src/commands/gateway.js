@@ -118,11 +118,8 @@ export default async function startGateway() {
   const port = baseConfig.port || 18789;
   
   server.listen(port, () => {
-    const waStatus = channelStatus.whatsapp === 'connected' ? 'connected' : channelStatus.whatsapp === 'error' ? 'error' : 'disabled';
-    const tgStatus = channelStatus.telegram === 'connected' ? 'connected' : channelStatus.telegram === 'error' ? 'error' : 'disabled';
-    const dcStatus = channelStatus.discord === 'connected' ? 'connected' : channelStatus.discord === 'error' ? 'error' : 'disabled';
-
-    const successMsg = `✅ AgentRelay is running!\n\n📱 WhatsApp: ${waStatus}\n🤖 Telegram: ${tgStatus}\n💬 Discord: ${dcStatus}\n\n🌐 Dashboard: http://localhost:${port}`;
+    const s = getStatus();
+    const successMsg = `✅ AgentRelay is running!\n\n📱 WhatsApp: ${s.whatsapp}\n🤖 Telegram: ${s.telegram}\n💬 Discord: ${s.discord}\n\n🌐 Dashboard: http://localhost:${port}`;
     
     console.log('\n' + boxen(successMsg, {
       padding: 1,
