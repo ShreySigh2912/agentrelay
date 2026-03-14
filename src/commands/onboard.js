@@ -68,11 +68,11 @@ export default async function onboard() {
       name: 'provider',
       message: 'Choose your preferred AI provider:',
       choices: [
-        { name: 'Google Gemini (free tier available — recommended)', value: 'gemini' },
+        { name: 'Google Gemini  (free tier — recommended)', value: 'gemini' },
         { name: 'Anthropic Claude', value: 'claude' },
-        { name: 'OpenAI', value: 'openai' },
-      ],
-    },
+        { name: 'OpenAI', value: 'openai' }
+      ]
+    }
   ]);
 
   // STEP 4 — API Key setup and verification
@@ -118,9 +118,9 @@ export default async function onboard() {
       choices: [
         { name: 'WhatsApp (scan QR code — no extra token needed)', value: 'whatsapp' },
         { name: 'Telegram (needs Bot Token from @BotFather)', value: 'telegram' },
-        { name: 'Discord (needs Bot Token)', value: 'discord' },
-      ],
-    },
+        { name: 'Discord (needs Bot Token)', value: 'discord' }
+      ]
+    }
   ]);
 
   const channelConfig = {
