@@ -47,7 +47,7 @@
     "express": "latest",
     "gradient-string": "latest",
     "grammy": "latest",
-    "inquirer": "latest",
+    "inquirer": "^8.2.7",
     "openai": "latest",
     "ora": "latest",
     "socket.io": "latest"
