@@ -1,0 +1,47 @@
+{
+  "name": "agentrelay",
+  "version": "0.1.0",
+  "description": "Self-hosted AI agent gateway for WhatsApp, Telegram & Discord",
+  "type": "module",
+  "bin": {
+    "agentrelay": "./bin/cli.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT",
+  "author": "Shrey Singh <shreysingh29@gmail.com>",
+  "homepage": "https://github.com/ShreySigh2912/agentrelay",
+  "scripts": {
+    "start": "node bin/cli.js gateway",
+    "dev": "node --watch bin/cli.js gateway",
+    "build:ui": "cd src/web/ui && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShreySigh2912/agentrelay.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@google/generative-ai": "latest",
+    "@whiskeysockets/baileys": "latest",
+    "boxen": "latest",
+    "chalk": "latest",
+    "commander": "latest",
+    "conf": "latest",
+    "discord.js": "latest",
+    "dotenv": "latest",
+    "express": "latest",
+    "gradient-string": "latest",
+    "grammy": "latest",
+    "inquirer": "latest",
+    "openai": "latest",
+    "ora": "latest",
+    "socket.io": "latest"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.1"
+  }
+}
