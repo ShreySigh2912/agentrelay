@@ -1,6 +1,6 @@
 {
   "name": "@shrey_singh/agentrelay",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Self-hosted AI agent gateway for WhatsApp, Telegram & Discord",
   "type": "module",
   "bin": {
