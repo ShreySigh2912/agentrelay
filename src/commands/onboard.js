@@ -163,25 +163,10 @@ export default async function onboard() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // STEP 3  — Choose channels
+  // STEP 3  — Connect Channels
   // ══════════════════════════════════════════════════════════════════════════
-  section('Step 3 of 4 — Messaging Channels');
-  console.log(chalk.gray('  Choose the platforms AgentRelay should listen on.\n'));
-
-  const { channels } = await inquirer.prompt([{
-    type: 'checkbox',
-    name: 'channels',
-    message: 'Select channels to connect:',
-    choices: [
-      { name: '📱 WhatsApp  (scan QR — no extra account needed)', value: 'whatsapp' },
-      { name: '🤖 Telegram  (Bot Token from @BotFather)', value: 'telegram' },
-      { name: '💬 Discord   (Bot Token from Discord Dev Portal)', value: 'discord' },
-    ],
-  }]);
-
-  if (channels.length === 0) {
-    console.log(chalk.yellow('\n  ⚠  No channels selected. You can enable them later via `agentrelay onboard`.'));
-  }
+  section('Step 3 of 4 — Connect Messaging Tools');
+  console.log(chalk.gray('  Enable the platforms you want your AI agent to listen on.\n'));
 
   const channelConfig = {
     whatsapp: { enabled: false, allowFrom: [] },
@@ -189,12 +174,35 @@ export default async function onboard() {
     discord:  { enabled: false, token: '' },
   };
 
+  // ── WhatsApp setup ────────────────────────────────────────────────────────
+  const { connectWhatsApp } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'connectWhatsApp',
+    message: '📱 Connect WhatsApp? (scan QR code later)',
+    default: true,
+  }]);
+
+  if (connectWhatsApp) {
+    console.log('\n' + chalk.bold.blue('  📖 WhatsApp Setup:'));
+    console.log(chalk.gray('  When the gateway starts, a QR code will appear.'));
+    console.log(chalk.gray('  Simply scan it with your phone to link your account.\n'));
+    channelConfig.whatsapp.enabled = true;
+    console.log(chalk.green('  ✅ WhatsApp enabled.'));
+  }
+
   // ── Telegram setup ────────────────────────────────────────────────────────
-  if (channels.includes('telegram')) {
+  const { connectTelegram } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'connectTelegram',
+    message: '🤖 Connect Telegram? (needs account from @BotFather)',
+    default: false,
+  }]);
+
+  if (connectTelegram) {
     console.log('\n' + chalk.bold.blue('  📖 Telegram Setup Guide:'));
     console.log(chalk.gray('  1. Open Telegram and search for @BotFather'));
     console.log(chalk.gray('  2. Send /newbot and follow the prompts'));
-    console.log(chalk.gray('  3. BotFather will give you a token like:  1234567890:ABCDefgh...'));
+    console.log(chalk.gray('  3. Copy the token provided (e.g., 123456:ABC...)'));
     console.log('');
 
     const { token } = await inquirer.prompt([{
@@ -202,21 +210,28 @@ export default async function onboard() {
       name: 'token',
       message: '  Paste your Telegram Bot Token:',
       mask: '●',
-      validate: v => v.trim().length > 20 ? true : 'Token looks too short.',
+      validate: v => v.trim().length > 10 ? true : 'Token looks too short.',
     }]);
 
     channelConfig.telegram.enabled = true;
     channelConfig.telegram.token = token.trim();
-    console.log(chalk.green('  ✅ Telegram token saved.'));
+    console.log(chalk.green('  ✅ Telegram setup complete.'));
   }
 
   // ── Discord setup ─────────────────────────────────────────────────────────
-  if (channels.includes('discord')) {
+  const { connectDiscord } = await inquirer.prompt([{
+    type: 'confirm',
+    name: 'connectDiscord',
+    message: '💬 Connect Discord? (needs Bot Token)',
+    default: false,
+  }]);
+
+  if (connectDiscord) {
     console.log('\n' + chalk.bold.blue('  📖 Discord Setup Guide:'));
-    console.log(chalk.gray('  1. Go to https://discord.com/developers/applications'));
-    console.log(chalk.gray('  2. Click "New Application" → name it'));
-    console.log(chalk.gray('  3. Go to Bot → Reset Token → copy it'));
-    console.log(chalk.gray('  4. Enable: Server Members Intent + Message Content Intent'));
+    console.log(chalk.gray('  1. Visit: https://discord.com/developers/applications'));
+    console.log(chalk.gray('  2. Create a "New Application"'));
+    console.log(chalk.gray('  3. In the "Bot" section, click "Reset Token" and copy it'));
+    console.log(chalk.gray('  4. Enable all "Privileged Gateway Intents" (Members, Presence, Content)'));
     console.log('');
 
     const { token } = await inquirer.prompt([{
@@ -224,23 +239,18 @@ export default async function onboard() {
       name: 'token',
       message: '  Paste your Discord Bot Token:',
       mask: '●',
-      validate: v => v.trim().length > 20 ? true : 'Token looks too short.',
+      validate: v => v.trim().length > 10 ? true : 'Token looks too short.',
     }]);
 
     channelConfig.discord.enabled = true;
     channelConfig.discord.token = token.trim();
-    console.log(chalk.green('  ✅ Discord token saved.'));
+    console.log(chalk.green('  ✅ Discord setup complete.'));
   }
 
-  // ── WhatsApp setup ────────────────────────────────────────────────────────
-  if (channels.includes('whatsapp')) {
-    console.log('\n' + chalk.bold.blue('  📖 WhatsApp Setup:'));
-    console.log(chalk.gray('  When the gateway starts, a QR code will appear.'));
-    console.log(chalk.gray('  Open WhatsApp → Settings → Linked Devices → Link a Device'));
-    console.log(chalk.gray('  Point your camera at the QR code to pair.\n'));
-    channelConfig.whatsapp.enabled = true;
-    console.log(chalk.green('  ✅ WhatsApp enabled — QR will appear when gateway starts.'));
-  }
+  const channels = [];
+  if (channelConfig.whatsapp.enabled) channels.push('whatsapp');
+  if (channelConfig.telegram.enabled) channels.push('telegram');
+  if (channelConfig.discord.enabled) channels.push('discord');
 
   // ══════════════════════════════════════════════════════════════════════════
   // STEP 4  — Final settings
