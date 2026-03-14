@@ -92,6 +92,11 @@ export default async function startGateway() {
   const uiPath = path.join(__dirname, '../web/ui/dist');
   app.use(express.static(uiPath));
 
+  // Catch-all: serve index.html for any non-API route (React SPA routing)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../web/ui/dist/index.html'));
+  });
+
   io.on('connection', (socket) => {
     // Send initial statuses immediately upon connect
     socket.emit('channel:status', channelStatus);
