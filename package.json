@@ -6,6 +6,21 @@
   "bin": {
     "agentrelay": "bin/cli.js"
   },
+  "files": [
+    "bin",
+    "src",
+    "!src/web/ui/src",
+    "!src/web/ui/node_modules",
+    "!src/web/ui/package.json",
+    "!src/web/ui/package-lock.json",
+    "!src/web/ui/eslint.config.js",
+    "!src/web/ui/postcss.config.js",
+    "!src/web/ui/tailwind.config.js",
+    "!src/web/ui/vite.config.js",
+    "!src/web/ui/README.md",
+    "!src/web/ui/index.html",
+    "!src/web/ui/public"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -15,7 +30,8 @@
   "scripts": {
     "start": "node bin/cli.js gateway",
     "dev": "node --watch bin/cli.js gateway",
-    "build:ui": "cd src/web/ui && npm run build"
+    "build:ui": "cd src/web/ui && npm run build",
+    "prepublishOnly": "npm run build:ui"
   },
   "keywords": [
     "ai",
