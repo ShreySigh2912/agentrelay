@@ -92,10 +92,6 @@ export default async function startGateway() {
   const uiPath = path.join(__dirname, '../web/ui/dist');
   app.use(express.static(uiPath));
 
-  // Catch-all: serve index.html for any non-API route (React SPA routing)
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../web/ui/dist/index.html'));
-  });
 
   io.on('connection', (socket) => {
     // Send initial statuses immediately upon connect
@@ -147,6 +143,11 @@ export default async function startGateway() {
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
+  });
+
+  // Catch-all: serve index.html for all non-API routes (React SPA client-side routing)
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../web/ui/dist/index.html'));
   });
 
   // STEP 5 — Show startup success message
