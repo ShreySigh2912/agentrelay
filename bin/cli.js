@@ -33,7 +33,7 @@ const config = new Config();
 
 // Check config helper
 function checkConfig() {
-  if (!config.exists()) {
+  if (!config.isConfigured()) {
     console.error(chalk.red('❌ AgentRelay is not set up yet.'));
     console.log(chalk.yellow('Run: agentrelay onboard'));
     process.exit(1);
@@ -168,7 +168,7 @@ serviceCmdGroup
 
 // ── Default action: if no command given and no config → auto-onboard ──────────
 program.action(async () => {
-  if (!config.exists()) {
+  if (!config.isConfigured()) {
     console.log(chalk.cyan('\n  Welcome to AgentRelay! Let\'s get you set up.\n'));
     await onboardCmd();
   } else {

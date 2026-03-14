@@ -52,6 +52,10 @@ class Config {
     return fs.existsSync(this.store.path);
   }
 
+  isConfigured() {
+    return !!this.get('apiKey');
+  }
+
   reset() {
     if (fs.existsSync(this.store.path)) {
       fs.unlinkSync(this.store.path);
