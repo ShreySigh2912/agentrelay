@@ -1,10 +1,10 @@
 {
   "name": "@shrey_singh/agentrelay",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Self-hosted AI agent gateway for WhatsApp, Telegram & Discord",
   "type": "module",
   "bin": {
-    "agentrelay": "./bin/cli.js"
+    "agentrelay": "bin/cli.js"
   },
   "engines": {
     "node": ">=22.0.0"
