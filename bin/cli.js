@@ -166,4 +166,14 @@ serviceCmdGroup
     await serviceStatus();
   });
 
+// ── Default action: if no command given and no config → auto-onboard ──────────
+program.action(async () => {
+  if (!config.exists()) {
+    console.log(chalk.cyan('\n  Welcome to AgentRelay! Let\'s get you set up.\n'));
+    await onboardCmd();
+  } else {
+    program.help();
+  }
+});
+
 program.parse(process.argv);
