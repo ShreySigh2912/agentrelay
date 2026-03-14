@@ -1,4 +1,5 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import pino from 'pino';
 import path from 'path';
 import os from 'os';
 import chalk from 'chalk';
@@ -26,8 +27,8 @@ class WhatsAppChannel {
         auth: state,
         printQRInTerminal: true,
         generateHighQualityLinkPreview: true,
-        // Suppress baileys verbose logs unless requested
-        logger: undefined,
+        // Standard Baileys practice: use a silent pino logger to avoid internal 'child' of undefined errors
+        logger: pino({ level: 'silent' }),
         browser: ['AgentRelay', 'Chrome', '1.0.0']
       });
 
