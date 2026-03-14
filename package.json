@@ -1,6 +1,6 @@
 {
-  "name": "agentrelay",
-  "version": "0.1.0",
+  "name": "@shrey_singh/agentrelay",
+  "version": "0.1.1",
   "description": "Self-hosted AI agent gateway for WhatsApp, Telegram & Discord",
   "type": "module",
   "bin": {
@@ -17,6 +17,18 @@
     "dev": "node --watch bin/cli.js gateway",
     "build:ui": "cd src/web/ui && npm run build"
   },
+  "keywords": [
+    "ai",
+    "whatsapp",
+    "telegram",
+    "discord",
+    "gateway",
+    "chatbot",
+    "gemini",
+    "claude",
+    "openai",
+    "self-hosted"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/ShreySigh2912/agentrelay.git"
