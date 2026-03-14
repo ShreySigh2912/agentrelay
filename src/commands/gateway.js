@@ -146,8 +146,8 @@ export default async function startGateway() {
   });
 
   // Catch-all: serve index.html for all non-API routes (React SPA client-side routing)
-  // Note: Express 5 requires /:splat(*) for catch-alls
-  app.get('/:splat(*)', (req, res) => {
+  // Note: Express 5 requires /{*path} for catch-alls
+  app.get('/{*path}', (req, res) => {
     res.sendFile(path.join(__dirname, '../web/ui/dist/index.html'));
   });
 
