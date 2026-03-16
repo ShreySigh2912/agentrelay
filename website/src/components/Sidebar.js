@@ -1,29 +1,31 @@
-export default function Sidebar() {
+'use client';
+
+export default function Sidebar({ activeTab, setActiveTab }) {
   const groups = [
     {
       title: "Get Started",
       items: [
-        { name: "Introduction", active: true },
-        { name: "Quickstart", active: false },
-        { name: "Onboarding", active: false }
+        { id: "introduction", name: "Introduction" },
+        { id: "quickstart", name: "Quickstart" },
+        { id: "onboarding", name: "Onboarding" }
       ]
     },
     {
       title: "Channels",
       items: [
-        { name: "WhatsApp", active: false },
-        { name: "Telegram", active: false },
-        { name: "Discord", active: false },
-        { name: "Mattermost", active: false },
-        { name: "iMessage", active: false }
+        { id: "whatsapp", name: "WhatsApp" },
+        { id: "telegram", name: "Telegram" },
+        { id: "discord", name: "Discord" },
+        { id: "mattermost", name: "Mattermost" },
+        { id: "imessage", name: "iMessage" }
       ]
     },
     {
       title: "Core Concepts",
       items: [
-        { name: "Agents Roster", active: false },
-        { name: "Routing Rules", active: false },
-        { name: "Node Gateway", active: false }
+        { id: "agents", name: "Agents Roster" },
+        { id: "routing", name: "Routing Rules" },
+        { id: "gateway", name: "Node Gateway" }
       ]
     }
   ];
@@ -39,9 +41,14 @@ export default function Sidebar() {
         <div key={idx} className="nav-group">
           <div className="nav-title">{group.title}</div>
           {group.items.map((item, i) => (
-            <a key={i} href="#" className={`nav-item ${item.active ? 'active' : ''}`}>
+            <button 
+              key={i} 
+              onClick={() => setActiveTab(item.id)}
+              className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+              style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
+            >
               {item.name}
-            </a>
+            </button>
           ))}
         </div>
       ))}
