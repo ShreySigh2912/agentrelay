@@ -53,6 +53,7 @@
     "@anthropic-ai/sdk": "latest",
     "@google/generative-ai": "latest",
     "@inquirer/prompts": "^8.3.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@whiskeysockets/baileys": "latest",
     "boxen": "latest",
     "chalk": "latest",
@@ -64,9 +65,11 @@
     "gradient-string": "latest",
     "grammy": "latest",
     "inquirer": "^8.2.7",
+    "node-cron": "^4.2.1",
     "openai": "latest",
     "ora": "latest",
     "pino": "^10.3.1",
+    "qrcode-terminal": "^0.12.0",
     "socket.io": "latest"
   },
   "devDependencies": {

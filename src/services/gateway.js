@@ -71,27 +71,27 @@ class GatewayController {
 
   getStatus() {
     const config = this.configManager.load();
-    return {
-      whatsapp: {
-        enabled: !!config.channels?.whatsapp?.enabled,
-        running: this.activeChannels.has('whatsapp')
-      },
-      telegram: {
-        enabled: !!config.channels?.telegram?.enabled,
-        running: this.activeChannels.has('telegram')
-      },
-      discord: {
-        enabled: !!config.channels?.discord?.enabled,
-        running: this.activeChannels.has('discord')
-      },
-      mattermost: {
-        enabled: !!config.channels?.mattermost?.enabled,
-        running: this.activeChannels.has('mattermost')
-      },
-      imessage: {
-        enabled: !!config.channels?.imessage?.enabled,
-        running: this.activeChannels.has('imessage')
+    const getChannelStatus = (name) => {
+      const channel = this.activeChannels.get(name);
+      if (!channel) return config.channels?.[name]?.enabled ? 'error' : 'disabled';
+      
+      // If the channel has a status property (like our new WhatsApp), use it
+      if (channel.status) {
+        if (channel.status === 'open') return 'connected';
+        if (channel.status === 'connecting') return 'starting';
+        return 'error';
       }
+      
+      // Fallback for basic channels
+      return 'connected';
+    };
+
+    return {
+      whatsapp: getChannelStatus('whatsapp'),
+      telegram: getChannelStatus('telegram'),
+      discord: getChannelStatus('discord'),
+      mattermost: getChannelStatus('mattermost'),
+      imessage: getChannelStatus('imessage')
     };
   }
 

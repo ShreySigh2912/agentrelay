@@ -14,7 +14,10 @@ const DEFAULT_CONFIG = {
       id: "default",
       name: "Default Assistant",
       model: "gemini-1.5-pro",
-      systemPrompt: "You are a helpful AI assistant."
+      systemPrompt: "You are a helpful AI assistant.",
+      tools: [], // list of dynamic tools { name, description, url, method, headers }
+      mcpServers: [], // list of MCP server configs { name, url/command }
+      cronJobs: [] // list of scheduled tasks { schedule, prompt, channel, recipient }
     }
   ],
   channels: {
@@ -48,21 +51,31 @@ class Config {
     let needsSave = false;
     
     // Migrate v0.1.x config (single agent) to v0.2.x (multi agent)
-    if (data.systemPrompt !== undefined || data.model !== undefined) {
+    // Only migrate if old keys exist AND agents array is either missing or empty
+    if ((data.systemPrompt !== undefined || data.model !== undefined) && (!data.agents || data.agents.length === 0)) {
       if (!data.agents) {
         data.agents = [];
       }
       
-      data.agents.push({
-        id: "default",
-        name: "Default Assistant",
-        model: data.model || DEFAULT_CONFIG.agents[0].model,
-        systemPrompt: data.systemPrompt || DEFAULT_CONFIG.agents[0].systemPrompt
-      });
+      const hasDefault = data.agents.some(a => a.id === 'default');
+      if (!hasDefault) {
+        data.agents.push({
+          id: "default",
+          name: "Default Assistant",
+          model: data.model || DEFAULT_CONFIG.agents[0].model,
+          systemPrompt: data.systemPrompt || DEFAULT_CONFIG.agents[0].systemPrompt
+        });
+      }
       
       delete data.systemPrompt;
       delete data.model;
       
+      data.version = "0.2.0";
+      needsSave = true;
+    }
+
+    // Ensure version is set if it's missing but agents exist
+    if (!data.version && data.agents && data.agents.length > 0) {
       data.version = "0.2.0";
       needsSave = true;
     }

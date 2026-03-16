@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import Config from '../config/index.js';
 import agentRouter from './router.js';
+import toolsService from '../services/tools.js';
+import mcpService from '../services/mcp.js';
 import chalk from 'chalk';
 
 class AgentBridge {
@@ -119,6 +121,21 @@ class AgentBridge {
       }
     ];
 
+    // Add Dynamic Tools from agent config
+    if (agentConfig.tools) {
+      tools.push(...toolsService.getFunctionDeclarations(agentConfig.tools));
+    }
+
+    // Add MCP Tools from agent config
+    if (agentConfig.mcpServers) {
+      try {
+        const mcpTools = await mcpService.getAgentTools(agentConfig.mcpServers);
+        tools.push(...mcpTools);
+      } catch (err) {
+        console.error(chalk.red(`[Bridge] MCP Tools loading failed: ${err.message}`));
+      }
+    }
+
     try {
       let responseText = '';
       const provider = config.provider;
@@ -192,6 +209,22 @@ class AgentBridge {
                 toolOutput = JSON.stringify({ success: true, ...result });
               } catch (e) {
                 toolOutput = JSON.stringify({ success: false, message: e.message });
+              }
+            } else {
+              // Check if it's a dynamic tool
+              const dynamicTool = agentConfig.tools?.find(t => t.name === name);
+              if (dynamicTool) {
+                const result = await toolsService.execute(dynamicTool, args);
+                toolOutput = JSON.stringify(result);
+              } 
+              // Check if it's an MCP tool
+              else if (name.includes('__')) {
+                try {
+                  const result = await mcpService.execute(name, args);
+                  toolOutput = result;
+                } catch (err) {
+                  toolOutput = `Error executing MCP tool: ${err.message}`;
+                }
               }
             }
 
@@ -272,6 +305,21 @@ class AgentBridge {
                 toolOutput = { success: true, ...r };
               } catch (e) {
                 toolOutput = { success: false, message: e.message };
+              }
+            } else {
+              // Check if it's a dynamic tool
+              const dynamicTool = agentConfig.tools?.find(t => t.name === call.name);
+              if (dynamicTool) {
+                toolOutput = await toolsService.execute(dynamicTool, call.args);
+              } 
+              // Check if it's an MCP tool
+              else if (call.name.includes('__')) {
+                try {
+                  const result = await mcpService.execute(call.name, call.args);
+                  toolOutput = { content: result };
+                } catch (err) {
+                  toolOutput = { error: err.message };
+                }
               }
             }
 

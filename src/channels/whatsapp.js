@@ -1,39 +1,51 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys';
+import {
+  makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  downloadMediaMessage,
+  Browsers,
+  fetchLatestBaileysVersion
+} from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import crypto from 'crypto';
 import chalk from 'chalk';
-import AgentBridge from '../agent/bridge.js';
+import qrcode from 'qrcode-terminal';
+
 import SessionManager from '../sessions/manager.js';
 import Config from '../config/index.js';
 import transcriber from '../agent/transcriber.js';
 
 class WhatsAppChannel {
   constructor() {
-    this.config = new Config().load();
-    this.bridge = AgentBridge;
-    this.sessionManager = SessionManager;
+    this.status = 'idle'; // idle, connecting, open, error
     this.sock = null;
+    this.configManager = new Config();
+    this.config = this.configManager.load();
+    this.sessionManager = SessionManager; // Keep this as it's used later
   }
 
   async start() {
     if (!this.config.channels?.whatsapp?.enabled) return;
 
-    const authDir = path.join(os.homedir(), '.agentrelay', 'auth', 'whatsapp');
+    this.status = 'connecting';
+    const authPath = path.join(os.homedir(), '.agentrelay', 'auth', 'whatsapp');
 
     try {
-      const { state, saveCreds } = await useMultiFileAuthState(authDir);
+      const { state, saveCreds } = await useMultiFileAuthState(authPath);
+      const { version, isLatest } = await fetchLatestBaileysVersion();
+
+      console.log(chalk.cyan(`[WhatsApp] Using Baileys v${version.join('.')}, isLatest: ${isLatest}`));
 
       this.sock = makeWASocket({
+        version,
         auth: state,
-        // Removed printQRInTerminal: true (deprecated) 
-        // Baileys will still output QR if it needs to, but we avoid the direct flag warning
         generateHighQualityLinkPreview: true,
-        // Standard Baileys practice: use a silent pino logger to avoid internal 'child' of undefined errors
         logger: pino({ level: 'silent' }),
-        browser: ['AgentRelay', 'Chrome', '1.0.0']
+        browser: Browsers.macOS('Desktop'),
+        printQRInTerminal: false
       });
 
       this.sock.ev.on('creds.update', saveCreds);
@@ -42,22 +54,21 @@ class WhatsAppChannel {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
-          console.log(chalk.yellow('[WhatsApp] New QR Code generated. Please scan it in the terminal or dashboard.'));
+          console.log(chalk.yellow('\n[WhatsApp] Scan this QR code to connect:'));
+          qrcode.generate(qr, { small: true });
         }
 
         if (connection === 'close') {
-          const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-          
-          console.log(chalk.yellow(`[WhatsApp] Connection closed (Reason: ${statusCode}). Reconnecting: ${shouldReconnect}`));
+          const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+          console.log(chalk.red(`[WhatsApp] Connection closed (Reason: ${lastDisconnect.error?.output?.statusCode}).`));
+          this.status = 'error';
           
           if (shouldReconnect) {
-            // Reconnect logic with 5s delay to avoid hammers
+            console.log(chalk.yellow('[WhatsApp] Reconnecting in 5 seconds...'));
             setTimeout(() => this.start(), 5000);
-          } else {
-            console.log(chalk.red('[WhatsApp] Logged out. Please delete the ~/.agentrelay/auth/whatsapp directory and authenticate again.'));
           }
         } else if (connection === 'open') {
+          this.status = 'open';
           console.log(chalk.green('✅ WhatsApp channel started globally!'));
         }
       });

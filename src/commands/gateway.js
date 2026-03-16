@@ -12,6 +12,7 @@ import sessionManager from '../sessions/manager.js';
 import AgentBridge from '../agent/bridge.js';
 import gatewayController from '../services/gateway.js';
 import nodeGateway from '../services/node.js';
+import cronService from '../services/cron.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,14 +35,12 @@ export default async function startGateway() {
   console.log(chalk.cyan('Starting AgentRelay Gateway...\n'));
   await gatewayController.startAll();
 
+  // STEP 2.1 — Start Cron Service
+  await cronService.start();
+
   // Map for status reporting to Socket.IO
   const getStatus = () => {
-    const s = gatewayController.getStatus();
-    return {
-      whatsapp: s.whatsapp.running ? 'connected' : (s.whatsapp.enabled ? 'error' : 'disabled'),
-      telegram: s.telegram.running ? 'connected' : (s.telegram.enabled ? 'error' : 'disabled'),
-      discord: s.discord.running ? 'connected' : (s.discord.enabled ? 'error' : 'disabled')
-    };
+    return gatewayController.getStatus();
   };
 
   // STEP 3 — Start Express HTTP server & Socket.IO
@@ -103,18 +102,35 @@ export default async function startGateway() {
     let data = configManager.load();
     
     if (agents && Array.isArray(agents)) {
-      data.agents = agents;
+      // Ensure unique IDs
+      const seenIds = new Set();
+      data.agents = agents.filter(agent => {
+        if (!agent.id || seenIds.has(agent.id)) return false;
+        seenIds.add(agent.id);
+        return true;
+      });
     } else {
       // Fallback for old UI requests
       const { systemPrompt, model } = req.body;
-      let defaultAgent = data.agents?.find(a => a.id === 'default');
+      if (!data.agents) data.agents = [];
+      
+      let defaultAgent = data.agents.find(a => a.id === 'default');
       if (!defaultAgent) {
-          defaultAgent = { id: 'default', name: 'Default Assistant', model: data.model || 'gemini-1.5-pro', systemPrompt: data.systemPrompt || 'You are a helpful AI assistant.' };
-          if (!data.agents) data.agents = [];
+          defaultAgent = { 
+            id: 'default', 
+            name: 'Default Assistant', 
+            model: model || data.model || 'gemini-1.5-pro', 
+            systemPrompt: systemPrompt || data.systemPrompt || 'You are a helpful AI assistant.' 
+          };
           data.agents.push(defaultAgent);
+      } else {
+          if (systemPrompt) defaultAgent.systemPrompt = systemPrompt;
+          if (model) defaultAgent.model = model;
       }
-      if (systemPrompt) defaultAgent.systemPrompt = systemPrompt;
-      if (model) defaultAgent.model = model;
+      
+      // Remove legacy keys if we now have agents
+      delete data.model;
+      delete data.systemPrompt;
     }
     
     configManager.save(data);
