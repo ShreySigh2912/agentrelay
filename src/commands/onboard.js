@@ -276,11 +276,17 @@ export default async function onboard() {
   const config = new Config();
   const data = config.load();
   data.provider     = provider;
-  data.model        = model;
   data.apiKey       = apiKey;
-  data.systemPrompt = systemPrompt;
   data.port         = parseInt(portStr, 10) || 18789;
   data.channels     = channelConfig;
+  
+  data.agents = [{
+    id: 'default',
+    name: 'Default Assistant',
+    model: model,
+    systemPrompt: systemPrompt
+  }];
+  
   config.save(data);
 
   // ── Success banner ─────────────────────────────────────────────────────────
@@ -295,6 +301,7 @@ export default async function onboard() {
     chalk.white(`Channels :\n${enabledList}`),
     { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'green' }
   ));
+
 
   // ── Offer to launch gateway + open browser ────────────────────────────────
   const { launch } = await inquirer.prompt([{

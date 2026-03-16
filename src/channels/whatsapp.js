@@ -1,17 +1,20 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+import crypto from 'crypto';
 import chalk from 'chalk';
 import AgentBridge from '../agent/bridge.js';
 import SessionManager from '../sessions/manager.js';
 import Config from '../config/index.js';
+import transcriber from '../agent/transcriber.js';
 
 class WhatsAppChannel {
   constructor() {
     this.config = new Config().load();
     this.bridge = AgentBridge;
-    this.sessionManager = new SessionManager();
+    this.sessionManager = SessionManager;
     this.sock = null;
   }
 
@@ -69,17 +72,26 @@ class WhatsAppChannel {
           const isGroup = remoteJid.endsWith('@g.us');
           let text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
 
+          // Check for audio
+          const isAudio = msg.message.audioMessage || msg.message.documentMessage?.mimetype?.startsWith('audio/');
+
           // Handle @mentions in groups
           if (isGroup) {
+            const requireMention = this.config.channels.whatsapp.requireMention !== false; // Default true
             // Baileys assigns jid in format "919999999999:1@s.whatsapp.net" potentially
             const botJid = this.sock.user.id.split(':')[0] + '@s.whatsapp.net';
             const botNumber = this.sock.user.id.split(':')[0];
-            const mentionedJids = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            
+            const contextInfo = msg.message.extendedTextMessage?.contextInfo || msg.message.audioMessage?.contextInfo || msg.message.videoMessage?.contextInfo || msg.message.imageMessage?.contextInfo;
+            const mentionedJids = contextInfo?.mentionedJid || [];
             
             const isMentioned = mentionedJids.includes(botJid) || text.includes(`@${botNumber}`);
-            if (!isMentioned) continue;
             
-            text = text.replace(new RegExp(`@${botNumber}`, 'g'), '').trim();
+            if (requireMention && !isMentioned) continue;
+            
+            if (isMentioned) {
+              text = text.replace(new RegExp(`@${botNumber}`, 'g'), '').trim();
+            }
           }
 
           // Check allowFrom array specifically for Whatsapp security
@@ -90,10 +102,48 @@ class WhatsAppChannel {
             continue; // Not explicitly permitted
           }
 
-          if (!text) continue;
+          if (isAudio && (!text || text.trim() === '')) {
+             try {
+               await this.sock.sendPresenceUpdate('recording', remoteJid);
+               const buffer = await downloadMediaMessage(msg, 'buffer', { }, { 
+                  logger: pino({ level: 'silent' }),
+                  reuploadRequest: this.sock.updateMediaMessage
+               });
+               const tmpFile = path.join(os.tmpdir(), `wa_audio_${crypto.randomUUID()}.ogg`);
+               fs.writeFileSync(tmpFile, buffer);
+               const transcript = await transcriber.transcribe(tmpFile);
+               if (transcript) {
+                 text = `[Voice Transcription] ${transcript}`;
+               }
+               await this.sock.sendPresenceUpdate('paused', remoteJid);
+             } catch (err) {
+               console.error(chalk.red(`[WhatsApp] Audio processing failed: ${err.message}`));
+               await this.sock.sendPresenceUpdate('paused', remoteJid);
+             }
+          }
+
+          if (!text && !isAudio && !msg.message.imageMessage) continue;
 
           const sessionId = `whatsapp_${remoteJid}`;
           
+          // Download image if present
+          let imageBase64 = null;
+          let imageMimeType = 'image/jpeg';
+          if (msg.message.imageMessage) {
+            try {
+              const buffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                logger: pino({ level: 'silent' }),
+                reuploadRequest: this.sock.updateMediaMessage
+              });
+              imageBase64 = buffer.toString('base64');
+              imageMimeType = msg.message.imageMessage.mimetype || 'image/jpeg';
+              if (!text) text = msg.message.imageMessage.caption || 'What is this image?';
+              console.log(chalk.cyan(`[WhatsApp] 📷 Image received from ${senderPhone}`));
+            } catch (imgErr) {
+              console.error(chalk.red(`[WhatsApp] Image download failed: ${imgErr.message}`));
+            }
+          }
+
           console.log(chalk.cyan(`[WhatsApp] ${new Date().toISOString()} | ${senderPhone}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`));
 
           // Update generic session manager state
@@ -107,7 +157,14 @@ class WhatsAppChannel {
             // Mark conversation composing "typing..." presence
             await this.sock.sendPresenceUpdate('composing', remoteJid);
             
-            const response = await this.bridge.send({ sessionId, text });
+            const response = await this.bridge.send({ 
+              sessionId, 
+              text, 
+              channel: 'whatsapp', 
+              senderId: senderPhone,
+              imageBase64,
+              imageMimeType
+            });
             
             // Revert composing state
             await this.sock.sendPresenceUpdate('paused', remoteJid);

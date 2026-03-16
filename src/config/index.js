@@ -4,16 +4,25 @@ import os from 'os';
 import fs from 'fs';
 
 const DEFAULT_CONFIG = {
-  version: "0.1.0",
+  version: "0.2.0",
   port: 18789,
   provider: "gemini",
   apiKey: "",
-  model: "gemini-1.5-pro",
-  systemPrompt: "You are a helpful AI assistant.",
+  openaiKey: "",
+  agents: [
+    {
+      id: "default",
+      name: "Default Assistant",
+      model: "gemini-1.5-pro",
+      systemPrompt: "You are a helpful AI assistant."
+    }
+  ],
   channels: {
-    whatsapp: { enabled: false, allowFrom: [] },
-    telegram: { enabled: false, token: "" },
-    discord: { enabled: false, token: "" }
+    whatsapp: { enabled: false, allowFrom: [], requireMention: true },
+    telegram: { enabled: false, token: "", allowFrom: [], requireMention: true },
+    discord: { enabled: false, token: "", allowFrom: [], requireMention: true },
+    mattermost: { enabled: false, url: "", token: "", allowFrom: [], requireMention: true },
+    imessage: { enabled: false, allowFrom: [], pollIntervalMs: 3000 }
   }
 };
 
@@ -30,6 +39,37 @@ class Config {
       configName: 'config',
       defaults: DEFAULT_CONFIG
     });
+
+    this.migrate();
+  }
+
+  migrate() {
+    let data = this.store.store;
+    let needsSave = false;
+    
+    // Migrate v0.1.x config (single agent) to v0.2.x (multi agent)
+    if (data.systemPrompt !== undefined || data.model !== undefined) {
+      if (!data.agents) {
+        data.agents = [];
+      }
+      
+      data.agents.push({
+        id: "default",
+        name: "Default Assistant",
+        model: data.model || DEFAULT_CONFIG.agents[0].model,
+        systemPrompt: data.systemPrompt || DEFAULT_CONFIG.agents[0].systemPrompt
+      });
+      
+      delete data.systemPrompt;
+      delete data.model;
+      
+      data.version = "0.2.0";
+      needsSave = true;
+    }
+
+    if (needsSave) {
+      this.store.store = data;
+    }
   }
 
   load() {

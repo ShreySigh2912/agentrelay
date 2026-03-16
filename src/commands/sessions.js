@@ -3,7 +3,7 @@ import inquirer from 'inquirer';
 import SessionManager from '../sessions/manager.js';
 
 export function sessionsList() {
-  const manager = new SessionManager();
+  const manager = SessionManager;
   const sessions = manager.list();
 
   if (sessions.length === 0) {
@@ -29,7 +29,7 @@ export function sessionsList() {
 }
 
 export async function sessionsClear() {
-  const manager = new SessionManager();
+  const manager = SessionManager;
   
   const { confirm } = await inquirer.prompt([
     {

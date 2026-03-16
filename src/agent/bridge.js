@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import Config from '../config/index.js';
+import agentRouter from './router.js';
+import chalk from 'chalk';
 
 class AgentBridge {
   constructor() {
@@ -24,20 +26,33 @@ class AgentBridge {
     }
   }
 
-  async send({ sessionId, text }) {
-    if (!sessionId || !text) {
-      throw new Error('sessionId and text are required');
+  async send({ sessionId, text, channel = 'unknown', senderId = 'unknown', imageBase64 = null, imageMimeType = 'image/jpeg' }) {
+    if (!sessionId || (!text && !imageBase64)) {
+      throw new Error('sessionId and (text or imageBase64) are required');
     }
 
     const config = this.configManager.load();
     const gatewayController = (await import('../services/gateway.js')).default;
     
-    if (!this.sessions.has(sessionId)) {
-      this.sessions.set(sessionId, []);
+    // Multi-Agent Routing
+    const agentId = agentRouter.match(channel, senderId);
+    const agentConfig = config.agents?.find(a => a.id === agentId) || config.agents[0];
+
+    // Isolate session per agent
+    const isolatedSessionId = `${agentId}:${sessionId}`;
+
+    const sessionManager = (await import('../sessions/manager.js')).default;
+    sessionManager.update(sessionId, { agentId });
+
+    if (!this.sessions.has(isolatedSessionId)) {
+      this.sessions.set(isolatedSessionId, []);
     }
 
-    const history = this.sessions.get(sessionId);
-    history.push({ role: 'user', content: text, timestamp: new Date() });
+    const history = this.sessions.get(isolatedSessionId);
+    
+    // Build the user content for history (text only for history storage)
+    const userContent = imageBase64 ? `${text || ''} [Image attached]`.trim() : text;
+    history.push({ role: 'user', content: userContent, timestamp: new Date() });
 
     // Define tools for the agent
     const tools = [
@@ -77,6 +92,30 @@ class AgentBridge {
             required: ['prompt']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'take_photo',
+          description: 'Take a photo using a paired mobile device camera. Returns a base64 image.',
+          parameters: { type: 'object', properties: {} }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_location',
+          description: 'Get the current GPS location of a paired mobile device. Returns latitude and longitude.',
+          parameters: { type: 'object', properties: {} }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'list_paired_nodes',
+          description: 'List all paired companion devices/mobile nodes connected to the gateway.',
+          parameters: { type: 'object', properties: {} }
+        }
       }
     ];
 
@@ -88,15 +127,28 @@ class AgentBridge {
         const openai = this._getProviderInstance(config);
         
         const messages = [
-          { role: 'system', content: config.systemPrompt },
-          ...history.map(msg => ({
+          { role: 'system', content: agentConfig.systemPrompt },
+          ...history.slice(0, -1).map(msg => ({
             role: msg.role === 'user' ? 'user' : 'assistant',
             content: msg.content
           }))
         ];
 
+        // Build the latest user message with optional image
+        if (imageBase64) {
+          messages.push({
+            role: 'user',
+            content: [
+              { type: 'text', text: text || 'What is this image?' },
+              { type: 'image_url', image_url: { url: `data:${imageMimeType};base64,${imageBase64}` } }
+            ]
+          });
+        } else {
+          messages.push({ role: 'user', content: text });
+        }
+
         let result = await openai.chat.completions.create({
-          model: config.model || 'gpt-4o',
+          model: agentConfig.model || 'gpt-4o',
           messages: messages,
           tools: tools,
           tool_choice: 'auto',
@@ -120,8 +172,27 @@ class AgentBridge {
             } else if (name === 'get_gateway_status') {
               toolOutput = JSON.stringify(gatewayController.getStatus());
             } else if (name === 'update_system_prompt') {
-              const res = await gatewayController.updateSystemPrompt(args.prompt);
+              const res = await gatewayController.updateSystemPrompt(args.prompt, agentId);
               toolOutput = JSON.stringify(res);
+            } else if (name === 'list_paired_nodes') {
+              const ng = (await import('../services/node.js')).default;
+              toolOutput = JSON.stringify(ng.listNodes());
+            } else if (name === 'take_photo') {
+              try {
+                const ng = (await import('../services/node.js')).default;
+                const result = await ng.invokeOnAnyNode('take_photo', {});
+                toolOutput = JSON.stringify({ success: true, imageBase64: result.imageBase64, message: 'Photo captured successfully' });
+              } catch (e) {
+                toolOutput = JSON.stringify({ success: false, message: e.message });
+              }
+            } else if (name === 'get_location') {
+              try {
+                const ng = (await import('../services/node.js')).default;
+                const result = await ng.invokeOnAnyNode('get_location', {});
+                toolOutput = JSON.stringify({ success: true, ...result });
+              } catch (e) {
+                toolOutput = JSON.stringify({ success: false, message: e.message });
+              }
             }
 
             messages.push(message);
@@ -134,7 +205,7 @@ class AgentBridge {
 
           // Get final response after tool execution
           result = await openai.chat.completions.create({
-            model: config.model || 'gpt-4o',
+            model: agentConfig.model || 'gpt-4o',
             messages: messages
           });
           responseText = result.choices[0].message.content;
@@ -146,7 +217,7 @@ class AgentBridge {
           // Gemini tool calling implementation
           const genAI = this._getProviderInstance(config);
           const model = genAI.getGenerativeModel({ 
-            model: config.model || "gemini-1.5-pro",
+            model: agentConfig.model || "gemini-1.5-pro",
             tools: [{ 
               functionDeclarations: tools.map(t => ({
                 name: t.function.name,
@@ -161,10 +232,16 @@ class AgentBridge {
               role: msg.role === 'assistant' ? 'model' : 'user',
               parts: [{ text: msg.content }]
             })),
-            systemInstruction: config.systemPrompt
+            systemInstruction: agentConfig.systemPrompt
           });
 
-          const result = await chat.sendMessage(text);
+          // Build multimodal parts for Gemini
+          const parts = [{ text: text || 'What is this image?' }];
+          if (imageBase64) {
+            parts.push({ inlineData: { mimeType: imageMimeType, data: imageBase64 } });
+          }
+
+          const result = await chat.sendMessage(parts);
           const call = result.response.functionCalls()?.[0];
 
           if (call) {
@@ -176,7 +253,26 @@ class AgentBridge {
             } else if (call.name === 'get_gateway_status') {
               toolOutput = gatewayController.getStatus();
             } else if (call.name === 'update_system_prompt') {
-              toolOutput = await gatewayController.updateSystemPrompt(call.args.prompt);
+              toolOutput = await gatewayController.updateSystemPrompt(call.args.prompt, agentId);
+            } else if (call.name === 'list_paired_nodes') {
+              const ng = (await import('../services/node.js')).default;
+              toolOutput = ng.listNodes();
+            } else if (call.name === 'take_photo') {
+              try {
+                const ng = (await import('../services/node.js')).default;
+                const r = await ng.invokeOnAnyNode('take_photo', {});
+                toolOutput = { success: true, imageBase64: r.imageBase64, message: 'Photo captured' };
+              } catch (e) {
+                toolOutput = { success: false, message: e.message };
+              }
+            } else if (call.name === 'get_location') {
+              try {
+                const ng = (await import('../services/node.js')).default;
+                const r = await ng.invokeOnAnyNode('get_location', {});
+                toolOutput = { success: true, ...r };
+              } catch (e) {
+                toolOutput = { success: false, message: e.message };
+              }
             }
 
             const finalResult = await chat.sendMessage([{
@@ -194,8 +290,8 @@ class AgentBridge {
         // Fallback for Claude without tools for now to keep it simple, or implement if easy
         const anthropic = this._getProviderInstance(config);
         const result = await anthropic.messages.create({
-          model: config.model || 'claude-3-5-sonnet-20240620',
-          system: config.systemPrompt,
+          model: agentConfig.model || 'claude-3-5-sonnet-20240620',
+          system: agentConfig.systemPrompt,
           max_tokens: 1024,
           messages: history.map(msg => ({ role: msg.role === 'user' ? 'user' : 'assistant', content: msg.content }))
         });

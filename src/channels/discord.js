@@ -8,7 +8,7 @@ class DiscordChannel {
   constructor() {
     this.config = new Config().load();
     this.bridge = AgentBridge;
-    this.sessionManager = new SessionManager();
+    this.sessionManager = SessionManager;
     this.client = null;
   }
 
@@ -41,15 +41,31 @@ class DiscordChannel {
 
         const isDM = !message.guild;
         const botMention = `<@${this.client.user.id}>`;
+        let text = message.content;
         
         // Servers: only respond when bot is @mentioned
-        if (!isDM && !message.content.includes(botMention)) return;
-
-        let text = message.content.replace(botMention, '').trim();
+        if (!isDM) {
+          const requireMention = this.config.channels.discord?.requireMention !== false;
+          const isMentioned = text.includes(botMention);
+          
+          if (requireMention && !isMentioned) return;
+          
+          if (isMentioned) {
+            text = text.replace(botMention, '').trim();
+          }
+        }
+        
         if (!text) return;
 
         const serverName = isDM ? 'DM' : message.guild.name;
         const sender = message.author.username;
+        
+        // Security check: allowFrom
+        const allowFrom = this.config.channels.discord?.allowFrom || [];
+        if (isDM && allowFrom.length > 0 && !allowFrom.includes(sender) && !allowFrom.includes(message.author.id)) {
+          console.log(chalk.gray(`[Discord] Dropped unauthorized DM from ${sender} (${message.author.id})`));
+          return;
+        }
         const sessionId = isDM ? `discord_dm_${message.author.id}` : `discord_${message.channel.id}`;
 
         console.log(chalk.magenta(`[Discord] ${new Date().toISOString()} | Server: ${serverName} | ${sender}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`));
@@ -68,7 +84,12 @@ class DiscordChannel {
         }, 9000);
 
         try {
-          const response = await this.bridge.send({ sessionId, text });
+          const response = await this.bridge.send({ 
+            sessionId, 
+            text, 
+            channel: 'discord', 
+            senderId: sender 
+          });
           clearInterval(typingInterval);
 
           // Split response > 2000 chars for Discord

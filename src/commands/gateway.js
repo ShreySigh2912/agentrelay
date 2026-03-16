@@ -8,9 +8,10 @@ import process from 'process';
 import { fileURLToPath } from 'url';
 
 import Config from '../config/index.js';
-import SessionManager from '../sessions/manager.js';
+import sessionManager from '../sessions/manager.js';
 import AgentBridge from '../agent/bridge.js';
 import gatewayController from '../services/gateway.js';
+import nodeGateway from '../services/node.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +29,6 @@ export default async function startGateway() {
   }
 
   const baseConfig = configManager.load();
-  const sessionManager = new SessionManager();
   
   // STEP 2 — Start all enabled channels via the controller
   console.log(chalk.cyan('Starting AgentRelay Gateway...\n'));
@@ -54,6 +54,9 @@ export default async function startGateway() {
   // Serve the web dashboard
   const uiPath = path.join(__dirname, '../web/ui/dist');
   app.use(express.static(uiPath));
+
+  // Attach the Node Gateway to the Socket.IO server
+  nodeGateway.attach(io);
 
 
   io.on('connection', (socket) => {
@@ -85,19 +88,37 @@ export default async function startGateway() {
   app.get('/api/config', (req, res) => {
     const { apiKey, ...safeConfig } = configManager.load();
     const maskedKey = apiKey ? `***${apiKey.slice(-4)}` : '';
+    
+    // Backward compatibility
+    const defaultAgent = safeConfig.agents?.find(a => a.id === 'default') || {};
+    safeConfig.model = safeConfig.model || defaultAgent.model;
+    safeConfig.systemPrompt = safeConfig.systemPrompt || defaultAgent.systemPrompt;
+    
     res.json({ ...safeConfig, maskedApiKey: maskedKey });
   });
 
-  // Update prompt and model settings logically
+  // Update agent configurations
   app.post('/api/config', (req, res) => {
-    const { systemPrompt, model } = req.body;
+    const { agents } = req.body;
     let data = configManager.load();
     
-    if (systemPrompt) data.systemPrompt = systemPrompt;
-    if (model) data.model = model;
+    if (agents && Array.isArray(agents)) {
+      data.agents = agents;
+    } else {
+      // Fallback for old UI requests
+      const { systemPrompt, model } = req.body;
+      let defaultAgent = data.agents?.find(a => a.id === 'default');
+      if (!defaultAgent) {
+          defaultAgent = { id: 'default', name: 'Default Assistant', model: data.model || 'gemini-1.5-pro', systemPrompt: data.systemPrompt || 'You are a helpful AI assistant.' };
+          if (!data.agents) data.agents = [];
+          data.agents.push(defaultAgent);
+      }
+      if (systemPrompt) defaultAgent.systemPrompt = systemPrompt;
+      if (model) defaultAgent.model = model;
+    }
     
     configManager.save(data);
-    res.json({ success: true });
+    res.json({ success: true, agents: data.agents });
   });
 
   app.get('/api/stats', (req, res) => {
@@ -106,6 +127,16 @@ export default async function startGateway() {
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', uptime: process.uptime() });
+  });
+
+  // Node Gateway endpoints
+  app.post('/api/nodes/pair', (req, res) => {
+    const code = nodeGateway.generatePairingCode();
+    res.json({ code, expiresInSeconds: 300 });
+  });
+
+  app.get('/api/nodes', (req, res) => {
+    res.json(nodeGateway.listNodes());
   });
 
   // Catch-all: serve index.html for all non-API routes (React SPA client-side routing)

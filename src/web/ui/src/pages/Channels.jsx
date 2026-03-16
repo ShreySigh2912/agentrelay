@@ -5,7 +5,9 @@ export default function Channels() {
   const [status, setStatus] = useState({
     whatsapp: 'loading...',
     telegram: 'loading...',
-    discord: 'loading...'
+    discord: 'loading...',
+    mattermost: 'loading...',
+    imessage: 'loading...'
   });
 
   useEffect(() => {
@@ -19,24 +21,11 @@ export default function Channels() {
       <h2 className="text-3xl font-bold">Channels</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <ChannelCard 
-          name="WhatsApp" 
-          status={status.whatsapp} 
-          icon="📱"
-          desc="Business or Personal Account"
-        />
-        <ChannelCard 
-          name="Telegram" 
-          status={status.telegram} 
-          icon="🤖"
-          desc="Bot connected via @BotFather"
-        />
-        <ChannelCard 
-          name="Discord" 
-          status={status.discord} 
-          icon="💬"
-          desc="Server Application Bot"
-        />
+        <ChannelCard name="WhatsApp" status={status.whatsapp} icon="📱" desc="Business or Personal Account" />
+        <ChannelCard name="Telegram" status={status.telegram} icon="🤖" desc="Bot connected via @BotFather" />
+        <ChannelCard name="Discord" status={status.discord} icon="💬" desc="Server Application Bot" />
+        <ChannelCard name="Mattermost" status={status.mattermost} icon="🟦" desc="Self-hosted team collaboration" />
+        <ChannelCard name="iMessage" status={status.imessage} icon="💬" desc="macOS native iMessage (requires Full Disk Access)" />
       </div>
     </div>
   );

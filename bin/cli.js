@@ -124,12 +124,16 @@ configCmdGroup
 
 configCmdGroup
   .command('set <key> <value>')
-  .description('Set a root config value (e.g. systemPrompt, model)')
+  .description('Set a root config value (e.g. port)')
   .action((key, value) => {
     checkConfig();
     const data = config.load();
     if (key === 'apiKey') {
         console.error(chalk.red('Cannot set apiKey manually via CLI. Rerun onboard.'));
+        process.exit(1);
+    }
+    if (key === 'systemPrompt' || key === 'model') {
+        console.error(chalk.red(`'${key}' is no longer a root config value. AgentRelay now supports multiple agents. Please use the Web UI to edit agent configurations.`));
         process.exit(1);
     }
     data[key] = value;

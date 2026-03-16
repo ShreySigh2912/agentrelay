@@ -2,6 +2,8 @@ import Config from '../config/index.js';
 import TelegramChannel from '../channels/telegram.js';
 import DiscordChannel from '../channels/discord.js';
 import WhatsAppChannel from '../channels/whatsapp.js';
+import MattermostChannel from '../channels/mattermost.js';
+import iMessageChannel from '../channels/imessage.js';
 import chalk from 'chalk';
 
 class GatewayController {
@@ -16,6 +18,8 @@ class GatewayController {
     if (config.channels?.telegram?.enabled) await this.startChannel('telegram');
     if (config.channels?.discord?.enabled) await this.startChannel('discord');
     if (config.channels?.whatsapp?.enabled) await this.startChannel('whatsapp');
+    if (config.channels?.mattermost?.enabled) await this.startChannel('mattermost');
+    if (config.channels?.imessage?.enabled) await this.startChannel('imessage');
   }
 
   async startChannel(name) {
@@ -26,6 +30,8 @@ class GatewayController {
       if (name === 'telegram') channel = new TelegramChannel();
       else if (name === 'discord') channel = new DiscordChannel();
       else if (name === 'whatsapp') channel = new WhatsAppChannel();
+      else if (name === 'mattermost') channel = new MattermostChannel();
+      else if (name === 'imessage') channel = new iMessageChannel();
 
       await channel.start();
       this.activeChannels.set(name, channel);
@@ -77,15 +83,27 @@ class GatewayController {
       discord: {
         enabled: !!config.channels?.discord?.enabled,
         running: this.activeChannels.has('discord')
+      },
+      mattermost: {
+        enabled: !!config.channels?.mattermost?.enabled,
+        running: this.activeChannels.has('mattermost')
+      },
+      imessage: {
+        enabled: !!config.channels?.imessage?.enabled,
+        running: this.activeChannels.has('imessage')
       }
     };
   }
 
-  async updateSystemPrompt(prompt) {
+  async updateSystemPrompt(prompt, agentId = 'default') {
     const config = this.configManager.load();
-    config.systemPrompt = prompt;
+    const agent = config.agents?.find(a => a.id === agentId);
+    if (!agent) {
+      return { success: false, message: `Agent '${agentId}' not found.` };
+    }
+    agent.systemPrompt = prompt;
     this.configManager.save(config);
-    return { success: true, message: 'System prompt updated' };
+    return { success: true, message: `System prompt updated for agent '${agentId}'` };
   }
 }
 

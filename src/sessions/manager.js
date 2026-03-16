@@ -62,6 +62,7 @@ class SessionManager {
     const stats = {
       totalSessions: sessions.length,
       sessionsByChannel: {},
+      sessionsByAgent: {},
       totalMessages: 0
     };
 
@@ -71,6 +72,13 @@ class SessionManager {
         stats.sessionsByChannel[session.channel] = 0;
       }
       stats.sessionsByChannel[session.channel]++;
+      
+      // Aggregate by agent count
+      const agentId = session.agentId || 'default';
+      if (!stats.sessionsByAgent[agentId]) {
+        stats.sessionsByAgent[agentId] = 0;
+      }
+      stats.sessionsByAgent[agentId]++;
       
       // Sum total messages
       stats.totalMessages += session.messageCount || 0;
@@ -92,4 +100,5 @@ class SessionManager {
   }
 }
 
-export default SessionManager;
+const globalSessionManager = new SessionManager();
+export default globalSessionManager;
